@@ -42,6 +42,7 @@
 // @match        https://imgbox.com*
 // @match        https://www.imagebam.com/*
 // @match        https://bangumi.tv/subject/*
+// @match        https://sportscult.org/*
 // @match        https://totheglory.im/*
 // @match        https://hd-space.org/index.php?page=upload
 // @match        https://hdcity.city/upload*
@@ -921,6 +922,7 @@ var imdb2db_chosen = GM_getValue('imdb2db_chosen') === undefined ? 0: GM_getValu
 var used_ptp_img_key = GM_getValue('used_ptp_img_key') === undefined ? '': GM_getValue('used_ptp_img_key');
 
 var used_tl_rss_key = GM_getValue('used_tl_rss_key') === undefined ? '': GM_getValue('used_tl_rss_key');
+var douban_poster_rehost = GM_getValue('douban_poster_rehost') === undefined ? 0: GM_getValue('douban_poster_rehost');
 
 //用来获取TMDB的key，需要使用请自行申请
 var used_tmdb_key = GM_getValue('used_tmdb_key') === undefined ? '0f79586eb9d92afa2b7266f7928b055c': GM_getValue('used_tmdb_key');
@@ -1400,6 +1402,7 @@ const o_site_info = {
     'MTeam': used_site_info.MTeam.url,
     'ReelFliX': 'https://reelflix.xyz/',
     'HHClub': 'https://hhanclub.top/',
+    'SportsCult': 'https://sportscult.org/'
 };
 
 if (tldomain == 0) {
@@ -1588,7 +1591,7 @@ var raw_info = {
     'labels': 0
 };
 
-var no_need_douban_button_sites = ['RED', 'OpenCD', 'lztr', 'DICMusic', 'OPS', 'jpop', 'bib', 'mam', 'SugoiMusic', 'MTeam', 'HHClub'];
+var no_need_douban_button_sites = ['RED', 'OpenCD', 'lztr', 'DICMusic', 'OPS', 'jpop', 'bib', 'mam', 'SugoiMusic', 'MTeam', 'HHClub', 'SportsCult'];
 
 Array.prototype.remove = function(val) {
     var index = this.indexOf(val);
@@ -2269,6 +2272,9 @@ function judge_if_the_site_as_source() {
         return 1;
     }
     if (site_url.match(/^http(s*):\/\/.*\/.*details.*php.*/i)) {
+        return 1;
+    }
+    if (site_url.match(/^http(s*):\/\/sportscult.org\/.*torrent-details/i)) {
         return 1;
     }
     if (site_url.match(/^http(s*):\/\/.*\/.*detail\/\d+/i)) {
@@ -4061,7 +4067,6 @@ function init_remote_server_button() {
             </div>
         </div>
     `);
-
     var qb = remote_server.qbittorrent;
     var tr = remote_server.transmission;
     for (let server in qb) {
@@ -8578,9 +8583,25 @@ function get_douban_info(raw_info) {
                     $('input[name=douban]').val(match_link('douban', data));
                 }
             } else if (site_url.match(/^https:\/\/.*.douban.com/)) {
-                var if_rehost = confirm("是否选择转存豆瓣海报？\n如果选择为是：则优先ptpimg，没有配置key则PixHost。");
-                if (if_rehost) {
-                    var poster = data.match(/https:\/\/img\d.doubanio.com.*?jpg/)[0];
+                if (douban_poster_rehost == -1) {
+                    GM_setClipboard(data);
+                    $('#copy').text('完成');
+                } else if (douban_poster_rehost == 0) {
+                    var if_rehost = confirm("是否选择转存豆瓣海报？\n如果选择为是：则优先ptpimg，没有配置key则PixHost。");
+                    if (if_rehost) {
+                        var poster = data.match(/https:\/\/img\d.doubanio.com.*?jpg/)[0];
+                        if (used_ptp_img_key) {
+                            douban_poster_rehost = 1;
+                        } else {
+                            douban_poster_rehost = 2;
+                        }
+                        GM_setValue('douban_poster_rehost', douban_poster_rehost);
+                    } else {
+                        GM_setValue('douban_poster_rehost', -1);
+                        GM_setClipboard(data);
+                        $('#copy').text('完成');
+                    }
+                } else {
                     if (used_ptp_img_key) {
                         ptp_send_doubanposter(poster, used_ptp_img_key, function(new_url){
                             data = data.replace(/https:\/\/img\d.doubanio.com.*?jpg/, new_url);
@@ -8594,9 +8615,6 @@ function get_douban_info(raw_info) {
                             $('#copy').text('完成');
                         });
                     }
-                } else {
-                    GM_setClipboard(data);
-                    $('#copy').text('完成');
                 }
             } else {
                 $('textarea[name="douban_info"]').val(raw_info.descr);
@@ -10986,6 +11004,31 @@ function auto_feed() {
             table = tbody.parentNode;
         }
 
+        if (origin_site == 'SportsCult') {
+            raw_info.name = $('td.header:contains("Name"):first').next().text();
+            raw_info.type = '体育';
+            raw_info.torrent_url = 'https://sportscult.org/' + $('a[href^="download.php"]').attr('href');
+            $('.block-head-title:contains("Torrent’s details")').after(`
+                <div style="padding-left:40px; padding-right:40px; width:1200px; height: 180px">
+                    <table id="mytable" class="lista">
+                    </table>
+                </div>
+            `);
+            tbody = $('#mytable')[0];
+            insert_row = tbody.insertRow(0);
+            var result = "";
+            $('td:contains("Description")').next().contents().each(function() {
+                if (this.nodeType === 3) {
+                    result += this.nodeValue;
+                } else if (this.nodeName === 'BR') {
+                    result += "\n";
+                }
+            });
+            raw_info.descr = `[quote]\n${result}\n[/quote]`;
+            raw_info.source_sel = 'WEB-DL';
+            raw_info.small_descr = '转自SportsCult'
+        }
+
         if (origin_site == 'NPUPT') {
             raw_info.name = raw_info.name.split('剩')[0].trim();
             raw_info.small_descr = $('.large').text();
@@ -12791,10 +12834,9 @@ function auto_feed() {
         console.log(raw_info.torrent_name);
         console.log(raw_info.torrent_url);
 
-        if (remote_server !== null) {
+        if (remote_server !== null && origin_site !== 'SportsCult') {
             init_remote_server_button();
         }
-
         //获取跳转的字符串
         var jump_str = dictToString(raw_info);
 
@@ -12813,7 +12855,6 @@ function auto_feed() {
                 }
             });
         }
-
     /*****************************************************************************************************************
     *                                       part 4 源网页转发跳转及功能部署                                             *
     ******************************************************************************************************************/
@@ -12939,7 +12980,7 @@ function auto_feed() {
             forward_r.setAttribute('class', 'row1');
             box_left.setAttribute('class', 'row2');
             box_right.setAttribute('class', 'row1');
-        } else if (origin_site == 'bib' || origin_site == 'mam') {
+        } else if (origin_site == 'bib' || origin_site == 'mam' || origin_site == 'SportsCult') {
             setTimeout(function(){
                 $('td:contains("转发种子")').last().css({'width':'60px'});
             }, 500);
@@ -20136,7 +20177,7 @@ function auto_feed() {
 
         else if(forward_site == 'BHD') {
 
-            var title = document.getElementById('title');
+            var title = document.getElementById('titleauto');
             title.value = raw_info.name;
 
             var announce = $('h2').find('div').text();
